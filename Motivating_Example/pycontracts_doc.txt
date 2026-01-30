@@ -1,0 +1,273 @@
+# PyContracts Documentation (for LLM Context)
+
+Introduction to PyContracts
+PyContracts is a Python package that allows to declare constraints on function parameters and return values. It supports a basic type system, variables binding, arithmetic constraints, and has several specialized contracts (notably for Numpy arrays).
+
+As a quick intro, please see this presentation about PyContracts.
+
+A presentation about PyContracts
+Why: The purpose of PyContracts is not to turn Python into a statically-typed language (albeit you can be as strict as you wish), but, rather, to avoid the time-consuming and obfuscating checking of various preconditions. In fact, more than the type constraints, I found useful the ability to impose value and size constraints. For example, “I need a list of at least 3 positive numbers” can be expressed as list[>=3](number, >0)). If you find that PyContracts is overkill for you, you might want to try a simpler alternative, such as typecheck. If you find that PyContracts is not enough for you, you probably want to be using Haskell instead of Python.
+
+Specifying contracts: Contracts can be specified in three ways:
+
+Using the ``@contract`` decorator:
+
+@contract(a='int,>0', b='list[N],N>0', returns='list[N]')
+def my_function(a, b):
+    ...
+Using annotations (for Python 3):
+
+@contract
+def my_function(a : 'int,>0', b : 'list[N],N>0') -> 'list[N]':
+     # Requires b to be a nonempty list, and the return
+     # value to have the same length.
+     ...
+Using docstrings, with the :type: and :rtype: tags:
+
+@contract
+def my_function(a, b):
+    """ Function description.
+        :type a: int,>0
+        :type b: list[N],N>0
+        :rtype: list[N]
+    """
+    ...
+Deployment: In production, all checks can be disabled using the function contracts.disable_all(), so the performance hit is 0.
+
+Extensions: You can extend PyContracts with new contracts types:
+
+new_contract('valid_name', lambda s: isinstance(s, str) and len(s)>0)
+@contract(names='dict(int: (valid_name, int))')
+def process_accounting(records):
+    ...
+Any Python type is a contract:
+
+@contract(a=int, # simple contract
+          b='int,>0' # more complicated
+          )
+def f(a, b):
+    ...
+Enforcing interfaces: ContractsMeta is a metaclass, like ABCMeta, which propagates contracts to the subclasses:
+
+from contracts import contract, ContractsMeta, with_metaclass
+
+class Base(with_metaclass(ContractsMeta, object)):
+
+    @abstractmethod
+    @contract(probability='float,>=0,<=1')
+    def sample(self, probability):
+        pass
+
+class Derived(Base):
+    # The contract above is automatically enforced,
+    # without this class having to know about PyContracts at all!
+    def sample(self, probability):
+        ....
+Numpy: There is special support for Numpy:
+
+@contract(image='array[HxWx3](uint8),H>10,W>10')
+def recolor(image):
+    ...
+
+Quick tour
+The contracts are specified using the type clause of RST-style docstrings (now accepted as standard in the python libraries); or, they can be passed explicitly to the @contract decorator. In this example, PyContracts is smart enough to check that the two parameters a and b are matrices of compatible dimensions. Then, it checks that the result value is of compatible dimensions as well.
+
+import numpy
+from contracts import contract
+
+@contract
+def matrix_multiply(a,  b):
+    ''' Multiplies two matrices together.
+
+        :param a: The first matrix. Must be a 2D array.
+         :type a: array[MxN],M>0,N>0
+
+        :param b: The second matrix. Must be of compatible dimensions.
+         :type b: array[NxP],P>0
+
+          :rtype: array[MxP]
+    '''
+    return numpy.dot(a, b)
+PyContracts can come in handy when you have operations that could be one-liners if you are sure of the types of the parameters, but doing all the checking adds to the complexity of the code.
+
+In the next example we check that:
+
+The two lists have elements of the same type (indicated by the variable x);
+
+The returned list has the correct size (the sum of the two lengths).
+
+@contract(      a='list[ M ](type(x))',
+                 b='list[ N ](type(x))',
+           returns='list[M+N](type(x))')
+def my_cat_equal(a, b):
+    ''' Concatenate two lists together. '''
+    return a + b
+The philosophy is to make the simple cases easy, and the difficult possible, while still retaining readability.
+
+For example, we can either ask for a simple list, or specify more about it using the additional clauses.
+
+Contract expression	Meaning
+list	          An instance of list.
+list[2]	          A list of two elements.
+list(int)	  A list of integers.
+list(number)	  A list of numbers.
+list[3](number)	  A list of exactly three numbers.
+list[>=3](number)	A list of at least three numbers.
+list[>=3](number, >0)	A list of at least three numbers, greater than 0.
+PyContracts supports the use of variables. There are two kinds of variables: lower-case letters (a, b, …) are general-purpose variables, while upper-case letters (A, B, …) are constrained to bind to integer types; they are meant to represent sizes and shapes. Moreover, PyContracts can do arithmetic and comparisons.
+
+Contract expression	Meaning
+tuple(list[N], list[N])	A tuple with two lists of the same length.
+tuple(list[N], list[M]), N<M	A tuple with two lists, the first one being shorter.
+list[>0](type(x))	A non-empty list containing elements of all the same type.
+tuple(list(type(x)), list(type(x)))	A tuple with two lists containing objects of the same type.
+
+API for specifying contracts
+This is a discussion of the PyContracts API.
+
+See contracts for a detailed list of this module’s public interface.
+See Language reference for a description of the domain specific language used to describe the contracts.
+Using the @contract decorator.
+The decorator contracts() is the main way to define constraints. It is quite flexible, and it is smart enough to support functions with variable number of arguments and keyword arguments.
+
+There are three ways to specify the contracts. In order of precedence:
+
+As arguments to this decorator.
+As Python 3 function annotations.
+Using :type: and :rtype: tags in the function’s docstring.
+PyContracts will try these options in order. Note that, in any case, only one of these options are chosen. For example, you cannot use both annotations and docstring for the same function: if annotations are found, the docstring is not considered.
+
+Using decorator arguments
+contract() accepts a list of keyword arguments. Each keyword should correspond to one function argument, plus the special name returns is reserved for describing the return value. An example use would be:
+
+from contracts import contract
+
+@contract(a='int,>0', b='list[N],N>0', returns='list[N]')
+def my_function(a, b):
+    ...
+The values can be either:
+
+Strings using PyContracts’ DSL language (see Language reference)
+
+Python types — in this case PyContracts will do a simple isinstance() check. This is slightly more clear if the contract is simple:
+
+@contract(a=int, b=float, returns=float)
+def my_function(a, b):
+    return a + b
+Using Python annotations
+The same rules apply. In this case the syntax would look like this:
+
+from contracts import contract
+
+@contract
+def my_function(a:'int,>0', b:'list[N],N>0') -> 'list[N]':
+    ...
+Using functions docstrings
+The Python standard library seems to have standardized on the :param:, :type:, :return:, :rtype: tags to document functions, and tools like Sphinx can interpret those tags to produce pretty documentation.
+
+PyContracts can read contracts declared using the :type: and :rtype: tags. In this way, your function becomes automatically more robust and better documented.
+
+Here is an example use:
+
+from contracts import contract
+
+@contract
+def my_function(a, b):
+  """ Function description.
+
+      :param a: first number
+      :type a: int,>0
+      :param b: description of b
+      :type b: list[N],N>0
+
+      :return: a list
+      :rtype: list[N]               """
+  ...
+Note By convention, those annotations must be parsable as reStructuredText. If the contract string has special RST characters in it, like *, you can include it in double ticks. PyContracts will remove the double ticks before interpreting the string.
+For example, the two annotations in this docstring are equivalent for PyContracts, but the latter is better for Sphinx:
+
+""" My function
+
+    :param a: First parameter
+    :type a: list(tuple(str,*))
+
+    :param b: First parameter
+    :type b: ``list(tuple(str,*))``
+"""
+
+Using the ContractsMeta meta-class
+The ContractsMeta meta-class can be used as a drop-in replacement for ABCMeta. It allows you to declare contracts for a superclass and then have those contracts automatically enforced for any class that derives from it.
+
+For example, let us define a “timer” interface whose start method requires a positive number:
+
+from contracts import ContractsMeta, contract
+from abc import abstractmethod
+
+class TimerInterface():
+    __metaclass__ = ContractsMeta
+
+    @abstractmethod
+    @contract(interval='(float|int),>0')
+    def start(self, interval):
+        pass
+Now we can subclass TimerInterface and all contracts will be automatically inherited:
+
+class Timer(TimerInterface):
+
+    def start(self, interval):
+        time.sleep()
+
+
+t = Timer()
+t.start(-1) # raises ContractNotRespected
+
+# contracts.interface.ContractNotRespected: Breach for argument 'interval' to Timer:start().
+# Condition -1 >= 0 not respected
+# checking: >=0               for value: Instance of int: -1
+# checking: (float|int),>=0   for value: Instance of int: -1
+
+Creating new contracts using new_contract
+The function new_contract() is used to define new contracts. It takes two arguments. The first argument is the name of the new contract, and the second is the value:
+
+new_contract('color', 'list[3](float)')
+Once defined, the new contracts can be used as part of more complicated expressions:
+
+@contract(colors='list(color)')
+def average_colors(colors):
+    pass
+The second parameter to new_contract can be either a string, a Python type, or a callable function.
+
+If it is a string or a type, it is interpreted as contract expression like any parameter to @contract().
+
+If it is a callable, it must accept one parameter, and either:
+
+return True or None, to signify it accepts.
+return False or raise ValueError, to signify it doesn’t.
+If ValueError is raised, its message is used in the error.
+
+This function returns a Contract object. It might be useful to check right away if the declaration is what you meant, using Contract.check() and Contract.fail().
+
+For example, suppose that you are writing a graphical application and that many of your functions need arguments representing colors. It might be a good idea to declare once and for all what is a color, and then reuse that definition. For example:
+
+color = new_contract('color', 'list[3](number,>=0,<=1)')
+# Make sure we got it right
+color.check([0,0,0])
+color.check([0,0,1])
+color.fail([0,0])
+color.fail([0,0,2])
+
+# Now use ``color`` in other contracts.
+@contract
+def fill_area(inside, border):
+    """ Fill the area inside the current figure.
+
+        :type border: color
+        :type inside: color              """
+    ...
+
+@contract
+def fill_gradient(colors):
+    """ Use a gradient to fill the area.
+
+        :type colors: list[>=2](color)     """
+    ...

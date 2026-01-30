@@ -1,0 +1,148 @@
+RQ1: Most frequent contracts for ML APIs (§3.1.1)
+Finding:
+1. Constraint check on single arguments of an API.
+2. Order of API calls that become a requirement eventually.
+Actionable Insight:
+This is good news because the software engineering (SE) community can employ existing contract mining approaches to also mine contracts for ML APIs. However, there might be a need to combine behavioral and temporal contract mining approaches that have been independently developed thus far.
+
+---
+
+RQ4: ML API contracts that are commonly violated occur in earlier ML pipeline stages (§3.4)
+Finding:
+ML API contract violations happen mostly in earlier phases of ML pipelines.
+Actionable Insight:
+A verification system with ML contract knowledge can explain whether a bug in the ML system that used those APIs stemmed from an API contract breach.
+
+---
+
+RQ3: The absence of precise error messages (§3.1.2)
+Finding:
+System failures lead to imprecise error messages, making contract comprehension and violation detection more challenging.
+Actionable Insight:
+Since domain experts can understand the challenging ML contracts (§3.3), encoding this knowledge as contracts can enable improved debugging mechanisms.
+
+---
+
+RQ1: ML APIs require several type checking contracts and interdependency between behavioral and temporal contracts (§3.1.1 and Table 6)
+Finding:
+ML APIs require special type-checking and behavioral-temporal interdependent contracts.
+Actionable Insight:
+Programming methodology and tools for design-by-contract should include sufficient expressiveness to handle these additional types of contracts seen in ML APIs.
+
+An example of an IC-1 contract is given in SO post 6, which shows an ML
+API users trying to use the TensorFlow API random_shuffle() to shuffle a
+Tensor, a, with some set seed value. One of the solutions mentioned in the
+accepted answer says that to do that, one should specify the argument seed
+with the desired value, e.g., the argument seed gets the value 42. The root
+cause of this contract violation is that acceptable input value is not supplied
+to (the random_shuffle()) method.
+Inter-argument contracts (IC-2): IC-2 contracts involve more than one
+argument to an API method, possibly using comparisons or logical expressions.
+For example, in SO post 4, the matmul() API from TensorFlow requires that
+the type of the second argument should match the type of the first argument.
+A comparison expression can express this contract, so it belongs to IC-2. The
+root cause of this contract violation is that the (matmul()) API is missing
+input value/type dependency between arguments. Another example 7
+for this category is nn.softmax_cross_entropy_with_logits(), an API from
+TensorFlow, which requires that the logits and labels arguments must have the same shape (i.e., [batch_size, num_classes])
+
+
+Eventually (F): Eventually contracts are AMO contracts where the ordering
+is only required at some point in history. In other words, this specifies that a
+required API ordering must be true at some point in this program’s execution
+history far enough in the future. For instance, in SO post 9, the author is trying
+to solve a sequential classification (input data where order matters) task. In
+the model, they used the LSTM() API to return a sequence and then output it
+as a Dense() object. The activation function has a one-to-one correspondence
+with the type of classification being performed. For that reason, the sigmoid
+function is rightly used. However, in the model, they used the LSTM() API
+to return a sequence and then output it as a Dense() object. This method
+order of APIs demonstrates an incorrect API method order, as the order in
+the question post is missing a TimeDistributed() API call.
+Note that the code is correct for a many-to-one task in natural language processing (NLP). However, in this question, the user asks for a many-to-many
+solution, in which case it becomes mandatory to apply TimeDistributed().
+Therefore, using the TimeDistributed() API only becomes a requirement
+after the LSTM() API is used to return a sequence. The root cause of this
+contract violation is that in a state where a call to a method (LSTM()) returns
+(a sequence), another call to a method (TimeDistributed()) should have occurred. Thus, in this SO post 9, this eventually contract is violated because
+the author did not know that the TimeDistributed() API is a requirement
+to be called eventually after the LSTM() API is used to return a sequence.
+
+SAM-AMO Inter-dependency (SAI): SAI contracts have a dependency
+between behavior and method orders. This dependency could be in either
+direction, i.e., the program’s state could determine the order of API calls,
+or the order of API calls could require that some condition must hold. For
+example, in SO post 10, if an ML API users uses the SVM-based classifier
+SVC as the estimator parameter for GridSearchCV() with Scikit-learn, then
+preprocessing.scale() must precede this call. Since the order of the methodcalls GridSearchCV() and preprocessing.scale() APIs is dependent upon
+the value given to the parameter of GridSearchCV(), it belongs to the SAI
+contract category. The root cause of this contract violation is that the value being passed to one method call (GridSearchCV()) requires a temporal ordering
+between the two (GridSearchCV() and preprocessing.scale()) methods.
+The leaf components of this subclass contain all contract cases that we derived individually for the SAM and AMO categories. For example, if an intraargument contract, IC-1 of an API determines an always (G), order of two
+APIs like the example above then, it belongs to SAM (Level 3) ∧ AMO
+(Level 2).
+Any dependency between SAM related leaf nodes, e.g., primitive type, built-in
+type, ML type, etc. and AMO related leaf nodes, i.e., G and F, belong to this
+category.
+Selection (SL): The final subclasses in our classification are those contracts
+that involve a choice when it comes to enforcing an API related contract. If
+the choices only belong to the contract components of SAM or AMO, then
+we categorize the contracts into either SAM (Level 3) or AMO (Level
+2), respectively. For instance, in SO post 11, the author wants to convert
+two numpy arrays to Tensors and uses TensorDataset() from the PyTorch
+library. The arguments of this API must either be of Double or Float type.
+The API then confirms DoubleTensor conversion upon exiting. Hence, there
+are two choices of category SAM (specifically IC-2) to maintain the contract
+for this API, and we mark this with SAM (Level 3) category. The root
+cause of this contract violation is that the client did not follow one of the two
+choices (providing arguments of Double or Float types).
+
+Another example can be seen in the SO post 12, where the author of the
+post is using the Keras library to create a neural network. Then they want
+to initialize and fit the neural network weights and save these weights. Next,
+they want to use these saved weights and predict some output values given the
+inputs. However, they had issues using the load_weights() API to collect the
+saved weights. The answer post explains that as one uses the load_weights()
+API, one has to maintain an order between two other related APIs (compile and predict). One expected order is calling load_weights(), compile(),
+predict(). The order alternative is calling compile(), load_weights(), and
+predict() at some point in history. As both choices involve AMO, this belongs
+to the AMO (Level 2) category. The root cause of this contract violation is
+that the client did not make one of the two choices (maintaining the method
+order between the related APIs).
+
+In comparison, if the choices involve both SAM and AMO, then we categorize
+the contract as a combination type contract Comb. of SAM and AMO. For
+example, in SO post 6, we observe such a combination. The accepted answer
+respondent mentions two alternative ways to maintain correctness when using
+the tf.random_shuffle API. The first choice is setting the argument seed for
+this API to some desired value. The second is maintaining an order between
+invocations of tf.random_shuffle() and tf.reset_default_graph(). Since
+the same contract breach can be resolved through either a behavioral or temporal contract that involves tf.random_shuffle() API, there is a selection
+involved as to which one to be adopted. Documentation should include all
+choices to maintain contracts for an API method. The root cause of this contract violation is that the client did not make one of the two choices (providing
+an acceptable seed value or using an acceptable method ordering) for the API
+to function properly. Researchers should emphasize the need to be able to express such requirements to users, who can choose to satisfy the requirements
+of a library either by maintaining a temporal order or by some state-based
+change. Therefore, the practitioners can design and develop a contract checking mechanism for ML API calling orders to facilitate the end-users.
+
+Required ML Contract. We identify that breaking the contract on the single argument of an API (IC-1) and eventually (F) required API method orders
+are the most frequent type of contracts violated. We observe that the lack
+of domain knowledge, and incomplete error messages are some of the reasons
+why ML API users struggle with the IC-1 category. For example, in SO post
+6 the author struggled to grasp the difference between graph level seed and
+operation level seed when using the tf.random_shuffle API. In addition,
+some ML APIs are involved in AMO contracts that require particular method
+orders. This required method order is often a source of confusion. For the
+posts with score ≥ 30 in PyTorch library (2), all observed contracts belong to
+AMO category. However, the number of posts with a score of 30 and higher
+and containing a contract from the PyTorch library is very low (3 contracts).
+Thus, we refrain from making any additional observations for this case. Toanalyze further why the required contracts mentioned in this finding are commonly violated, we have randomly sampled ML APIs from our dataset and
+studied the documentation for these APIs to investigate if the documentation
+is complete. We have analyzed API documentation from the Keras and TensorFlow libraries and observed that many of these incorrect usages of APIs
+are not documented, especially the corner cases. As an instance, the function
+RELU is a valid activation function for ML layer APIs in TensorFlow. However,
+it should not be used if the layer API in question is the output layer of the
+model in a multi-label classification.
+The SE community can employ existing contract mining approaches Zhong
+et al. (2020); Reger et al. (2013); Lemieux et al. (2015); Lemieux (2015); Le
+and Lo (2018) to mine these contracts and enhance library documentation.

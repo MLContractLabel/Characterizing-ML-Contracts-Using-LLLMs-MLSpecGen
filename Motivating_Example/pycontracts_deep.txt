@@ -1,0 +1,100 @@
+DEEP LEARNING CONTRACTS
+
+In the DL Contract approach, we abstract the data properties, expected output, model architecture, and training behavior of a DNN model and specify the properties of DL APIs connected via a computation graph. We gather and inspect necessary conditions from three sources (details in §4.1). We filter out the obligations from the DL app developer as preconditions and expectations from DL software as postconditions. Here, we use a novel runtime assertion check in DL computation. The contract checker modules first parse those contracts and translate them into templates. Those templates are validated to handle exceptions if they occur. If a contract is violated, the user receives a contract violation message. Otherwise, the API returns the normal execution output. Thus, our proposed solution generalizes to other bugs and model categories. It would be easy for library developers to specify the contracts for other types of bugs following these procedures of DL Contract.
+
+Next, we present the design and usage of DL Contract, including examples and our approach for abstracting DL-related properties.
+
+
+3.1 Writing Deep Learning Contract
+
+DL Contract uses an annotation-based approach to add contracts to DL APIs, which allows library developers to add contracts without modifying compilers and build tools. This means that software using DL APIs does not need to be modified. DL library developers can add preconditions that must be satisfied before the API is called and postconditions that the API guarantees to be true upon completion.
+
+
+3.1.1 Syntax
+
+To use contracts in a deep learning library, it is necessary to annotate the API with @contract and @new_contract. This allows library developers to create expressions for checking specified contracts. DL Contract can check types such as tensors and model objects, as well as simple data types like strings, floats, numbers, arrays, and booleans. It utilizes logical operators like AND (,) and OR (|) and allows for arithmetic and comparison expressions. Additionally, DL Contract can be used to check constraints of various model properties during training and abstraction.
+
+
+3.1.2 Illustrative Example
+
+To create a contract, a library developer annotates a DL API using @contract and @new_contract. Inside @contract, the developer defines types and functions for checking contracts. Using @new_contract, the developer writes functions for performing computations necessary for a contract and for checking preconditions and postconditions.
+
+For instance, in Example 3.1, a contract is imposed as a precondition on the Keras training function fit to ensure that data is within a specified range before training.
+
+
+Example 3.1: A Contract on Fit API inside Keras Library
+
+ 1 @new_contract
+ 2 def data_normalization(x):
+ 3     normalization_interval = np.max(x) - np.min(x)
+ 4     if normalization_interval > 2.0:
+ 5         msg = "Data should be normalized before training, train and test data should be divided by value " + str(np.max(x))
+ 6         raise ContractException(msg)
+ 7 
+ 8 @contract(x='data_normalization')
+ 9 def fit(self, x=None, y=None, ...):
+10     pass
+
+When a buggy DL program makes use of this annotated API, DL Contract will throw the following error:
+
+ContractViolated: Data should be normalized before training, train and test data should be divided by value 255.0.
+
+
+Example 3.2: Preventing Overfitting Bugs
+
+ 1 @new_contract
+ 2 def overfitting(history):
+ 3     i = 0
+ 4     while i <= (len(history.epoch) - 2):
+ 5         epochNo = i + 2
+ 6         diff_loss = history['loss'][i + 1] - history['loss'][i]
+ 7         diff_val_loss = history['val_loss'][i + 1] - history['val_loss'][i]
+ 8         i += 1
+ 9         if diff_val_loss > 0.0:
+10             if diff_loss <= 0.0:
+11                 msg = "After Epoch " + str(epochNo) + ", diff_val_loss = " + str('%.4f' % diff_val_loss) + " and diff_loss = " + str('%.4f' % diff_loss) + " causes overfitting"
+12                 raise ContractException(msg)
+13 
+14 @contract(returns='overfitting')
+15 def fit(self, x=None, y=None, ...): 
+16     return self.history
+
+When this contract is violated, DL Contract throws:
+
+ContractViolated: After Epoch: 11, diff_val_loss = 0.34 and diff_loss = -0.12 causes overfitting.
+
+
+Contextualized Inter-API Call Contracts
+
+The next challenge is to ensure that DL Contracts can be written involving multiple APIs at different stages of the DL pipeline. To solve this problem, DL Contract is designed to write multiple functions using @new_contract annotations that take formal parameters across multiple DL APIs.
+
+For example, when the number of target classes is 2 (i.e., binary classification), the activation function of the last layer should not be softmax or relu, and the loss function should be 'binary_crossentropy'.
+
+Although the best activation for hidden layers is ReLU, using ReLU in the last layer will zero out negative outputs, causing accuracy issues. To prevent this, DL Contract can enforce contracts on both the activation function and the loss function.
+
+
+Example 3.3: Last Layer Activation and Loss Function Contract
+
+ 1 @new_contract
+ 2 def contract_checkerfunc1(model):
+ 3     last_layer_output = int(str((model.layers[len(model.layers) - 1]).output_shape).split(',').pop(-1).strip(')'))
+ 4     activation_func = str(model.layers[len(model.layers) - 1].__getattribute__('activation')).split()[1]
+ 5     if last_layer_output >= 3:
+ 6         if activation_func not in 'softmax':
+ 7             msg1 = 'For multiclass classification activation_func should be softmax'
+ 8             raise ContractException(msg1)
+ 9 
+10 @new_contract
+11 def contract_checkerfunc2(loss):
+12     if loss not in 'categorical_crossentropy':
+13         msg2 = 'loss should be categorical crossentropy'
+14         raise ContractException(msg2)
+15 
+16 @contract(self='model,contract_checkerfunc1')
+17 @contract(loss='str,contract_checkerfunc2')
+18 def compile(self, optimizer='rmsprop', loss=None, metrics=None, ...):
+19     pass
+
+When this contract is violated:
+
+ContractViolated: For multiclass classification activation_func should be softmax, loss should be categorical crossentropy.

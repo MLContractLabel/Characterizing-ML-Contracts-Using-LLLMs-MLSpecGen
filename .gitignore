@@ -1,0 +1,86 @@
+# Dependencies
+node_modules/
+# Note: package-lock.json should be committed for reproducible builds
+
+# Build output
+out/
+*.vsix
+
+# Virtual environments
+venv/
+.venv/
+ml_contract_persistent_venv_v2/
+**/__pycache__/
+*.pyc
+
+# Environment variables
+.env
+.env.local
+
+# Logs
+*.log
+logs/
+feedback_*.log
+test_output.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated/Output files
+ml-contract-outputs/
+*.csv
+*.whl
+*.tar.gz
+
+# Test/Development files
+test_*.py
+test.py
+test_wrapper*.py
+*_test.js
+gpt_ragtest.js
+claude_ragtest.js
+
+# Documentation files (keep only README.md)
+EXTENSION_*.md
+Extension_*.md
+FEEDBACK_*.md
+FIXES_*.md
+FUTURE_*.md
+GITHUB_*.md
+MULTI_*.md
+REPOSITORY_*.md
+ROADMAP.md
+SHORT_*.md
+VENV_*.md
+VERSIONING_*.md
+
+# Data files in root (resources/ folder has the needed ones)
+*.csv
+Tensorembedded_examples.json
+# kerasembedded_examples.json - REQUIRED, do not ignore
+actionable_examples.txt
+pycontracts_*.txt
+rcontext.txt
+Research_Context.txt
+
+# Separate projects
+SRS-Code-Generator/
+
+# IDE settings
+.vscode/
+
+# Old versions
+VS Extension V2/
+feedbackService.js
+
+# Personal files
+resume_*.tex
+*.key
+*.pem
